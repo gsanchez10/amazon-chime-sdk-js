@@ -14,6 +14,9 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
 
   private removeTrackAddedEventListener: (() => void) | null = null;
   private removeTrackRemovedEventListeners: { [trackId: string]: () => void } = {};
+  private removeHandlerFromSubscribedSet = new Set<
+    (attendeeId: string, present: boolean, externalUserId?: string | null) => void
+  >();
 
   private readonly trackEvents: string[] = [
     'ended',
@@ -32,6 +35,10 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
     this.removeTrackAddedEventListener && this.removeTrackAddedEventListener();
     for (const trackId in this.removeTrackRemovedEventListeners) {
       this.removeTrackRemovedEventListeners[trackId]();
+    }
+    for (let handler of this.removeHandlerFromSubscribedSet) {
+      this.context.realtimeController.realtimeUnsubscribeToAttendeeIdPresence(handler);
+      this.removeHandlerFromSubscribedSet.delete(handler);
     }
   }
 
@@ -187,7 +194,23 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
       width = cap.width as number;
       height = cap.height as number;
     }
-    tile.bindVideoStream(attendeeId, false, stream, width, height, streamId);
+    let externalUserId = this.context.realtimeController.realtimeExternalUserIdFromAttendeeId(
+      attendeeId
+    );
+    tile.bindVideoStream(attendeeId, false, stream, width, height, streamId, externalUserId);
+    if (!externalUserId) {
+      const handler = (idOfattendee: string, present: boolean, externalUserId: string): void => {
+        if (attendeeId === idOfattendee && this.removeHandlerFromSubscribedSet.has(handler)) {
+          tile.bindVideoStream(attendeeId, false, stream, width, height, streamId, externalUserId);
+
+          this.context.realtimeController.realtimeUnsubscribeToAttendeeIdPresence(handler);
+          this.removeHandlerFromSubscribedSet.delete(handler);
+        }
+      };
+      this.context.realtimeController.realtimeSubscribeToAttendeeIdPresence(handler);
+      this.removeHandlerFromSubscribedSet.add(handler);
+    }
+
     this.logger.info(
       `video track added, created tile=${tile.id()} track=${trackId} streamId=${streamId}`
     );
