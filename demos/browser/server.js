@@ -10,7 +10,7 @@ const AWS = require('aws-sdk');
 /* eslint-enable */
 
 let hostname = '127.0.0.1';
-let port = 8080;
+let port = 8181;
 let protocol = 'http';
 let options = {};
 
@@ -38,6 +38,10 @@ const server = require(protocol).createServer(options, async (request, response)
   log(`${request.method} ${request.url} BEGIN`);
   compression({})(request, response, () => {});
   try {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Request-Method', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, POST');
+    response.setHeader('Access-Control-Allow-Headers', '*');
     if (
       request.method === 'GET' &&
       (request.url === '/' || request.url === '/v2/' || request.url.startsWith('/?'))
@@ -78,6 +82,7 @@ const server = require(protocol).createServer(options, async (request, response)
       attendeeCache[title][joinInfo.JoinInfo.Attendee.AttendeeId] = name;
       response.statusCode = 201;
       response.setHeader('Content-Type', 'application/json');
+
       response.write(JSON.stringify(joinInfo), 'utf8');
       response.end();
       log(JSON.stringify(joinInfo, null, 2));
